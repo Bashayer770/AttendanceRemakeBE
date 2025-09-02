@@ -1,0 +1,6 @@
+@AttendanceRemake_HostAddress = http://localhost:5197
+
+GET {{AttendanceRemake_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
