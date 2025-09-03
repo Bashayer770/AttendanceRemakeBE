@@ -65,6 +65,31 @@ namespace AttendanceRemake.Controllers
                 return BadRequest(ex.Message);
             }
         }
+        [HttpGet]
+        [Route(nameof(GetLateExcuseRecord))]
+        public ActionResult<List<Object>> GetLateExcuseRecord(string user, DateTime startDate, DateTime EndDate)
+        {
+            try
+            {
+                ValidateInput(startDate, EndDate);
+                AttendanceBusiness ab = new AttendanceBusiness();
+                UserData userData = _db2.GetUserByID(user).Result;
+
+                Employee empInfo = _rep.GetByIdAsync<Employee>(userData.EmpNo).Result;
+
+                var userActivity = _rep.GetListByAsync<Attendance>(con => con.FingerCode == empInfo.FingerCode && con.IodateTime.Date >= startDate.Date && con.IodateTime.Date <= EndDate.Date && (con.TrType == 1 || con.TrType == 0)).Result.OrderBy(c => c.IodateTime).ToList<Attendance>();
+                TimingPlan userTimePlan = _rep.GetByAsync<TimingPlan>(tp => tp.Code == empInfo.TimingCode).Result;
+
+
+                var record = ab.CalculateLate(userActivity, userTimePlan);
+
+                return Ok(record);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
         private void ValidateInput(DateTime startDate, DateTime EndDate)
         {
             if ((EndDate - startDate).TotalDays > 92)
