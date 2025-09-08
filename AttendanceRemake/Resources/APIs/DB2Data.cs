@@ -43,7 +43,7 @@ namespace AttendanceRemake.Resources.APIs
         public int? JobCode { get; set; }
         public string? JobTitle { get; set; }
         public int? SectorCode { get; set; }
-        public int? ClerkCode { get; set; }
+        public string? ClerkCode { get; set; }
         public string? FirstName { get; set; }
         public string? SecondName { get; set; }
         public string? ThirdName { get; set; }

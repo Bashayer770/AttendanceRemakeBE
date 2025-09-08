@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.SqlServer.Query.Internal;
 using Microsoft.IdentityModel.Tokens;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.Reflection.Metadata.Ecma335;
 using System.Transactions;
 
 namespace AttendanceRemake.Business.Attendance
@@ -101,17 +102,26 @@ namespace AttendanceRemake.Business.Attendance
 
             return sorted;
         }
-        public List<Object> CalculateLate(List<Models.Attendance> attendance, TimingPlan TimePlan)
+        public List<AttendanceResponse> CalculateLate(List<Models.Attendance> attendance, TimingPlan TimePlan)
         {
             TimeSpan inTime = TimeSpan.Parse(TimePlan.FromTime);
             TimeSpan outTime = TimeSpan.Parse(TimePlan.ToTime);
             var attendanceLog = GetUserActivity(attendance, TimePlan);
-            List<Object> result = new List<Object>();
+            List<AttendanceResponse> result = new List<AttendanceResponse>();
             foreach(var a in attendanceLog)
             {
-                result.Add(GetActualInTime(a.Signs));
-                result.Add(GetDuringWorkLeaveTime(a.Signs));
-                result.Add(GetActualLeave(a.Signs));
+                result.Add(new AttendanceResponse
+                {
+                    Day = a.Date,
+                    In = (TimeSpan)GetActualInTime(a.Signs),
+                    Excuses = GetDuringWorkLeaveTime(a.Signs),
+                    Out = (TimeSpan)GetActualLeave(a.Signs)
+
+                });
+                //result.Add(GetActualInTime(a.Signs));
+                //result.Add(GetDuringWorkLeaveTime(a.Signs));
+                //result.Add(GetActualLeave(a.Signs));
+                
             }
             return result;
         }
@@ -140,11 +150,11 @@ namespace AttendanceRemake.Business.Attendance
             }
             return null;
         }
-        private List<(TimeSpan, TimeSpan)> GetDuringWorkLeaveTime(List<string> signs)
+        private List<TimeSpan[]> GetDuringWorkLeaveTime(List<string> signs)
         {
             var ActualInTime = GetActualInTime(signs);
             var ActualOutTime = GetActualLeave(signs);
-            List<(TimeSpan, TimeSpan)> Excuses = new List<(TimeSpan, TimeSpan)>();
+            List<TimeSpan[]> Excuses = new List<TimeSpan[]>();
             var excuseList = signs.Where( 
                 sign => TimeSpan.Parse(sign.Split("Tr")[0]) > ActualInTime &&
                         TimeSpan.Parse(sign.Split("Tr")[0]) < ActualOutTime).ToList();
@@ -156,23 +166,26 @@ namespace AttendanceRemake.Business.Attendance
                 {
                     var current = excuseList[i].Split("Tr");
                     var next = excuseList[i + 1].Split("Tr");
+                    if (container[0] == "")
+                    {
+                        if (Int32.Parse(current[1]) == 1) // && Int32.Parse(next[1]) == 1
+                        {
+                            container[0] = current[0];
+                        }
+                    }
 
-                    if (Int32.Parse(current[1]) == 0 && Int32.Parse(next[1]) == 1)
-                    {
-                        container[0] = current[0];
-                    }
-                    if(Int32.Parse(current[1]) == 1 && Int32.Parse(next[1]) == 1)
-                    {
-                        container[1] = next[0];
-                    }
-                    else
+                    if(Int32.Parse(current[1]) == 0)//  && Int32.Parse(next[1]) == 1
                     {
                         container[1] = current[0];
                     }
+                    //else
+                    //{
+                    //    container[1] = current[0];
+                    //}
                     if (!container.Contains(""))
                     {
                         Excuses.Add(
-                            (TimeSpan.Parse(container[0]), TimeSpan.Parse(container[1]))
+                            [TimeSpan.Parse(container[0]), TimeSpan.Parse(container[1])]
                             );
                         container = ["", ""];
                     }
@@ -182,11 +195,79 @@ namespace AttendanceRemake.Business.Attendance
             return Excuses;
             
         }
+
+        public List<Deductions> CalculateDeductions(List<Models.Attendance> attendance, TimingPlan TimePlan)
+        {
+            TimeSpan inTime = TimeSpan.Parse(TimePlan.FromTime);
+            TimeSpan outTime = TimeSpan.Parse(TimePlan.ToTime);
+
+            List<AttendanceResponse> Lates = CalculateLate(attendance,TimePlan);
+            List<Deductions> deductions = new List<Deductions>();
+            foreach (var row in Lates)
+            {
+                Deductions deduct = new Deductions();
+                deduct.Day = row.Day;
+
+                if (row.In != null)
+                {
+                    if (inTime < row.In )
+                    {
+                        deduct.Late = (int)(row.In - inTime).TotalMinutes;
+                    }
+                    
+                }
+                else
+                {
+                    deduct.ForgetIn = 5;
+                }
+                if (row.Out != null)
+                {
+                    if (outTime > row.Out)
+                    {
+                        deduct.Late = (int)(outTime - row.Out).TotalMinutes;
+                    }
+
+                }
+                else
+                {
+                    deduct.ForgetOut = 5;
+                }
+                if (row.Excuses.Any())
+                {
+                    foreach (var excuse in row.Excuses)
+                    {
+                        int duringWorkExcuse =  (int)(excuse[1] - excuse[0]).TotalMinutes;
+                        if(duringWorkExcuse < 15)
+                        {
+                            deduct.DuringWorkExcuse += duringWorkExcuse;
+                        }
+                    }
+                }
+                deductions.Add(deduct);
+            }
+            return deductions;
+        }
     }
 
     public class AttendanceLog
     {
         public DateOnly Date { get; set; }
         public List<string>? Signs { get; set; }
+    }
+    public class AttendanceResponse
+    {
+        public DateOnly Day { get; set; }
+        public TimeSpan In { get; set; }
+        public TimeSpan Out {  get; set; }
+        public List<TimeSpan[]> Excuses { get; set; }
+    }
+    public class Deductions
+    {
+        public DateOnly Day { get; set; }
+        public int Late { get; set; } = 0;
+        public int EndWorkExcuse { get; set; } = 0;
+        public int DuringWorkExcuse { get; set; } = 0;
+        public int ForgetIn { get; set; } = 0;
+        public int ForgetOut { get; set; } = 0;
     }
 }
