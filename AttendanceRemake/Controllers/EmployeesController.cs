@@ -1,6 +1,13 @@
-﻿namespace AttendanceRemake.Controllers
+﻿using AttendanceRemake.Models;
+using AttendanceRemake.Repositories;
+using AttendanceRemake.Resources.APIs;
+using Microsoft.AspNetCore.Mvc;
+
+namespace AttendanceRemake.Controllers
 {
-    public class EmployeesController
+    [ApiController]
+    [Route("api/[controller]")]
+    public class EmployeesController : ControllerBase
     {
     }
 }

@@ -35,6 +35,7 @@ namespace AttendanceRemake.Repositories
         public async Task<bool> AddAsync<T>(T entity) where T : class
         {
             await _context.Set<T>().AddAsync(entity);
+            await SaveAsync();
             return true;
         }//ADDS new record to DB
 
@@ -45,6 +46,7 @@ namespace AttendanceRemake.Repositories
             {
                 await updateFn(entity);
             }
+            await SaveAsync();
         }
 
         public async Task DeleteAsync<T>(Expression<Func<T, bool>> predicate) where T : class  //DELETES records that matches the condition 
@@ -52,6 +54,7 @@ namespace AttendanceRemake.Repositories
             var entities = _context.Set<T>().Where(predicate);
             _context.Set<T>().RemoveRange(entities);
             await Task.CompletedTask;
+            await SaveAsync();
         }
 
         public async Task SaveAsync() => await _context.SaveChangesAsync();  //SAVES all changes to DB 
