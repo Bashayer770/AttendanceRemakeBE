@@ -64,6 +64,58 @@ namespace AttendanceRemake.Controllers
             }
         }
 
+        [HttpPut]
+        [Route(nameof(UpdateNode) + "/{serial}")]
+        public async Task<IActionResult> UpdateNode([FromRoute] string serial, [FromBody] Node node)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(serial))
+                    return BadRequest("Serial is required.");
+
+                await _rep.UpdateAsync<Node>(serial, async existing =>
+                {
+                    existing.DescA = node.DescA;
+                    existing.DescE = node.DescE;
+                    existing.LocCode = node.LocCode;
+                    existing.Floor = node.Floor;
+                    await Task.CompletedTask;
+                });
+
+                await _rep.SaveAsync();
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                return ResponseError(ex);
+            }
+        }
+
+
+
+
+        [HttpDelete]
+        [Route(nameof(DeleteNode) + "/{serial}")]
+        public async Task<IActionResult> DeleteNode([FromRoute] string serial)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(serial))
+                    return BadRequest("Serial is required.");
+
+                await _rep.DeleteAsync<Node>(n => n.SerialNo == serial);
+                await _rep.SaveAsync();
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                return ResponseError(ex);
+            }
+        }
+
+
+
+
         private ObjectResult ResponseError(Exception ex)
         {
             var stackTrace = new StackTrace(ex, true);
