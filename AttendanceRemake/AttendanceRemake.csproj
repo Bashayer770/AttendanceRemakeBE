@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <Folder Include="Domain\" />
+    <Folder Include="DTOs\" />
     <Folder Include="Services\" />
   </ItemGroup>
 
