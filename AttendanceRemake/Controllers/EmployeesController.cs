@@ -1,4 +1,5 @@
-﻿using AttendanceRemake.Models;
+﻿using System.Linq.Expressions;
+using AttendanceRemake.Models;
 using AttendanceRemake.Repositories;
 using AttendanceRemake.Resources.APIs;
 using Microsoft.AspNetCore.Mvc;
@@ -18,7 +19,6 @@ namespace AttendanceRemake.Controllers
             _repo = repo;
             _db2 = new DB2Data(configuration);
         }
-
 
         // GET: api/Employees/search?empNo=&fingerCode=&civilId=&deptCode=&name=
         [HttpGet("search")]
@@ -43,51 +43,50 @@ namespace AttendanceRemake.Controllers
             if (fingerCode.HasValue) q = q.Where(e => e.FingerCode == fingerCode.Value);
             if (deptCode.HasValue) q = q.Where(e => e.DeptCode == deptCode.Value);
 
-           
             if (!string.IsNullOrWhiteSpace(name))
             {
                 var tokens = name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                 if (tokens.Length > 0)
                 {
-                    var param = System.Linq.Expressions.Expression.Parameter(typeof(Employee), "e");
-                    var nameAProp = System.Linq.Expressions.Expression.Property(param, nameof(Employee.NameA));
-                    var nameEProp = System.Linq.Expressions.Expression.Property(param, nameof(Employee.NameE));
+                    var param = Expression.Parameter(typeof(Employee), "e");
+                    var nameAProp = Expression.Property(param, nameof(Employee.NameA));
+                    var nameEProp = Expression.Property(param, nameof(Employee.NameE));
 
-                    var efFuncs = System.Linq.Expressions.Expression.Property(
+                    var efFuncs = Expression.Property(
                         null,
-                        typeof(Microsoft.EntityFrameworkCore.EF).GetProperty(nameof(Microsoft.EntityFrameworkCore.EF.Functions))!
+                        typeof(EF).GetProperty(nameof(EF.Functions))!
                     );
 
-                    var likeMethod = typeof(Microsoft.EntityFrameworkCore.DbFunctionsExtensions)
+                    var likeMethod = typeof(DbFunctionsExtensions)
                         .GetMethods()
-                        .First(m => m.Name == nameof(Microsoft.EntityFrameworkCore.DbFunctionsExtensions.Like)
+                        .First(m => m.Name == nameof(DbFunctionsExtensions.Like)
                                     && m.GetParameters().Length == 3
                                     && m.GetParameters()[1].ParameterType == typeof(string)
                                     && m.GetParameters()[2].ParameterType == typeof(string));
 
-                    System.Linq.Expressions.Expression? andChainA = null;
+                    Expression? andChainA = null;
                     foreach (var token in tokens)
                     {
-                        var patternConst = System.Linq.Expressions.Expression.Constant($"%{token}%", typeof(string));
-                        var likeA = System.Linq.Expressions.Expression.Call(likeMethod, efFuncs, nameAProp, patternConst);
-                        andChainA = andChainA == null ? likeA : System.Linq.Expressions.Expression.AndAlso(andChainA, likeA);
+                        var patternConst = Expression.Constant($"%{token}%", typeof(string));
+                        var likeA = Expression.Call(likeMethod, efFuncs, nameAProp, patternConst);
+                        andChainA = andChainA == null ? likeA : Expression.AndAlso(andChainA, likeA);
                     }
 
-                    System.Linq.Expressions.Expression? andChainE = null;
+                    Expression? andChainE = null;
                     foreach (var token in tokens)
                     {
-                        var patternConst = System.Linq.Expressions.Expression.Constant($"%{token}%", typeof(string));
-                        var likeE = System.Linq.Expressions.Expression.Call(likeMethod, efFuncs, nameEProp, patternConst);
-                        andChainE = andChainE == null ? likeE : System.Linq.Expressions.Expression.AndAlso(andChainE, likeE);
+                        var patternConst = Expression.Constant($"%{token}%", typeof(string));
+                        var likeE = Expression.Call(likeMethod, efFuncs, nameEProp, patternConst);
+                        andChainE = andChainE == null ? likeE : Expression.AndAlso(andChainE, likeE);
                     }
 
-                    System.Linq.Expressions.Expression orChain = andChainA!;
+                    Expression orChain = andChainA!;
                     if (andChainE != null)
                     {
-                        orChain = System.Linq.Expressions.Expression.OrElse(andChainA!, andChainE);
+                        orChain = Expression.OrElse(andChainA!, andChainE);
                     }
 
-                    var lambda = System.Linq.Expressions.Expression.Lambda<Func<Employee, bool>>(orChain, param);
+                    var lambda = Expression.Lambda<Func<Employee, bool>>(orChain, param);
                     q = q.Where(lambda);
                 }
             }
@@ -116,7 +115,6 @@ namespace AttendanceRemake.Controllers
                 HasPass = e.HasPass,
                 LocCode = e.LocCode,
                 RegNo = e.RegNo,
-
                 CivilID = providedCivilDb2?.CivilID,
                 DB2DeptCode = providedCivilDb2?.DeptCode,
                 FullName = providedCivilDb2?.FullName,
@@ -127,8 +125,6 @@ namespace AttendanceRemake.Controllers
             return Ok(result);
         }
 
-
-
         // GET: api/Employees/{empNo}
         [HttpGet("{empNo:int}")]
         public async Task<IActionResult> GetByEmpNo(int empNo)
@@ -136,7 +132,6 @@ namespace AttendanceRemake.Controllers
             var e = await _repo.GetByAsync<Employee>(x => x.EmpNo == empNo);
             if (e == null) return NotFound();
 
-        
             return Ok(new EmployeeDetailsDto
             {
                 EmpNo = e.EmpNo,
@@ -156,9 +151,45 @@ namespace AttendanceRemake.Controllers
                 RegNo = e.RegNo
             });
         }
+
+        // PUT: api/Employees/{empNo}
+        [HttpPut("{empNo:int}")]
+        public async Task<IActionResult> UpdateEmployee(int empNo, [FromBody] UpdateEmployeeDto dto)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            var existing = await _repo.GetByIdAsync<Employee>(empNo);
+            if (existing == null) return NotFound($"Employee {empNo} not found.");
+
+            await _repo.UpdateAsync<Employee>(empNo, async e =>
+            {
+                if (dto.FingerCode.HasValue) e.FingerCode = dto.FingerCode.Value;
+                if (dto.TimingCode.HasValue) e.TimingCode = dto.TimingCode.Value;
+                if (dto.HasAllow.HasValue) e.HasAllow = dto.HasAllow.Value;
+                if (dto.Status.HasValue) e.Status = dto.Status.Value;
+                await Task.CompletedTask;
+            });
+
+            return Ok(new
+            {
+                EmpNo = empNo,
+                existing.FingerCode,
+                existing.TimingCode,
+                existing.HasAllow,
+                existing.Status
+            });
+        }
     }
 
-    public class EmployeeDetailsDto              
+    public class UpdateEmployeeDto
+    {
+        public int? FingerCode { get; set; }
+        public int? TimingCode { get; set; }
+        public bool? HasAllow { get; set; }
+        public int? Status { get; set; } // 0 or 1
+    }
+
+    public class EmployeeDetailsDto
     {
         // Employee fields
         public int EmpNo { get; set; }
